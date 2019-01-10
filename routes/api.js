@@ -2,19 +2,40 @@ const express = require('express');
 const passport = require('passport');
 
 const router = express.Router();
-const authenticated = () => passport.authenticate('jwt', { session: false });
 
-router.get('/public', (req, res) => {
-    res.send({ message: 'This is public :)' });
+/**
+ * authenticationRequired is a middleware that use the jwt strategy to authenticate
+ * the use. If authentication fails, passport will respond with a 401 Unauthorized status.
+ * If authentication succeeds, the `req.user` property will be set to the authenticated user.
+ */
+const authenticationRequired = () => passport.authenticate('jwt', { session: false });
+
+/**
+ * authentication middleware overrides the default behavior of passport. The next handler is
+ * always invoked. If authentication fails, the `req.user` property will be set to null.
+ * If authentication succeeds, the `req.user` property will be set to the authenticated user.
+ * see: http://www.passportjs.org/docs/authenticate/#custom-callback
+ */
+const authentication = (req, res, next) => passport.authenticate('jwt', { session: false }, (err, user) => {
+  if (err) { next(err); }
+  req.user = user || null;
+  next();
+})(req, res, next);
+
+// This endpoint is accessible by authenticated and anonymous users
+router.get('/public', authentication, (req, res) => {
+  const username = req.user ? req.user.username : 'anonymous';
+  res.send({ message: `Hello ${username}, this message is public!` });
 });
 
-router.get('/private', authenticated(), (req, res) => {
-    res.send({ message: 'Private Zone' });
+// This endpoint is protected and has access to the authenticated user.
+router.get('/private', authenticationRequired, (req, res) => {
+  res.send({ message: `Hello ${req.user.username}, only logged in users can access this page!` });
 });
 
-router.get('/me', authenticated(), (req, res) => {
-    const { password, ...user } = req.user; // remove password from the const 'user' 
-    res.send({ user: user });
-})
+// This endpoint is protected and has access to the authenticated user.
+router.get('/me', authenticationRequired, (req, res) => {
+  res.send({ user: req.user });
+});
 
 module.exports = router;
